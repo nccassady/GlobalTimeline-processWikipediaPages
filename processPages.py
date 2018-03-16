@@ -21,8 +21,12 @@ inputPath = '../pages/input/'
 inputBackupPath = '../pages/input-finished/'
 outputPath = '../pages/output/'
 personPagePath = '../pages/people/'
-logFile = codecs.open('log.txt', mode='w')
+logFile = codecs.open('log.txt', mode='w+')
 files = [f for f in listdir(inputPath) if isfile(join(inputPath, f))]
+
+def writeLog(message):
+	print(datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f') + ': ' + message)
+	logFile.write(datetime.now().strftime('%Y-%m-%d %H:%M:%S:%f') + ': ' + message + "\n")
 
 def removeLinks(line):
 	return re.sub(r'[\[\[]|[\]\]]', '', line)
@@ -33,16 +37,13 @@ def formatLine(date, description, location=""):
 def getCoordinates(placeName):
 	geolocator = Nominatim()
 	storedLocation = locations.find_one({'name': placeName})
+	location = ['', '']
 
 	if storedLocation:
-		print("Location (%s) found in Mongo." % placeName)
-		logFile.write("Location (%s) found in Mongo." % placeName)
-		logFile.write("\n")
+		writeLog("Location (%s) found in Mongo." % placeName)
 		location = storedLocation['coordinates'].split(',')
-	else:
-		print("Location (%s) not found, sleeping for 1 second." % placeName)
-		logFile.write("Location (%s) not found, sleeping for 1 second." % placeName)
-		logFile.write("\n")
+	elif placeName.strip():
+		writeLog("Location (%s) not found, sleeping for 1 second." % placeName)
 		time.sleep(1)
 		geocodeLocation = geolocator.geocode(placeName)
 		if geocodeLocation:
@@ -62,15 +63,11 @@ def getPersonBirthAndDeathCoordinates(name):
 	birthCoordinates = "[]"
 	deathCoordinates = "[]"
 	if storedPerson:
-		print("Person (%s) found in Mongo." % name)
-		logFile.write("Person (%s) found in Mongo." % name)
-		logFile.write("\n")
+		writeLog("Person (%s) found in Mongo." % name)
 		birthCoordinates = getCoordinates(storedPerson['birthPlace'])
 		deathCoordinates = getCoordinates(storedPerson['deathPlace'])
-	else:
-		print("Person (%s) not found." % name)
-		logFile.write("Person (%s) not found." % name)
-		logFile.write("\n")
+	elif not isfile(personPagePath + name.strip().replace(' ', '_') + '.txt'):
+		writeLog("Person (%s) not found." % name)
 		call(['python3', 'pywikibot/pwb.py', 'myscript2', name])
 
 		storedPerson = people.find_one({'name': name})
@@ -78,11 +75,9 @@ def getPersonBirthAndDeathCoordinates(name):
 			birthCoordinates = getCoordinates(storedPerson['birthPlace'])
 			deathCoordinates = getCoordinates(storedPerson['deathPlace'])
 		else:
-			print("Person (%s) could not have their birth and death place found." % name)
-			logFile.write("Person (%s) could not have their birth and death place found." % name)
-			logFile.write("\n")
+			writeLog("Person (%s) could not have their birth and death place found." % name)
 			return ''
-	return '(' + birthCoordinates + deathCoordinates + ')'
+	return '([' + birthCoordinates + '][' + deathCoordinates + '])'
 
 def parseItems(itemList, sectionName):
 	outputitems = ""
@@ -170,9 +165,7 @@ def processSection(name, nextName):
 
 for file in files:
 	fileProcessingTime = datetime.now()
-	print(file)
-	logFile.write(file)
-	logFile.write("\n")
+	writeLog(file)
 	outputFile = codecs.open(outputPath + file, encoding='utf-8', mode='w', errors='replace')
 	contents = Path(inputPath + file).read_text()
 
@@ -183,26 +176,12 @@ for file in files:
 	outputFile.write("Deaths\n")
 	outputFile.write(processSection('Deaths', '.*?'))
 
-	# eventsText = re.search(r'== Events ==(.*)== Births ==', contents, re.S)
-	# if eventsText:
-	# 	events = parseItems(eventsText)
-	# 	outputFile.write(events)
-	# else:
-	# 	print 'No events found'
-
-	# births = re.search(r'== Births ==(.*)== Deaths ==', contents, re.S)
-	# if births:
-	# 	births = parseItems(births)
-	# 	outputFile.write(births)
-	# else:
-	# 	print 'No births found'
-
 	outputFile.close()
 	os.rename(inputPath + file, inputBackupPath + file)
 	fileProcessingTimes.append(datetime.now() - fileProcessingTime)
 
 timeToFinishScript = datetime.now() - startScriptTime
 averageTime = (sum(fileProcessingTimes, timedelta()) / len(fileProcessingTimes)).total_seconds()
-print("The script took {} seconds to run, processing {} files at an average of {} seconds per file.".format(timeToFinishScript, len(fileProcessingTimes), averageTime))
+writeLog("The script took {} seconds to run, processing {} files at an average of {} seconds per file.".format(timeToFinishScript, len(fileProcessingTimes), averageTime))
 
 
