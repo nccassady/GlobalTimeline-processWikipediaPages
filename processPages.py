@@ -4,6 +4,7 @@ from os.path import isfile, join
 from pathlib import Path
 from geotext import GeoText
 from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut
 from pymongo import MongoClient
 import codecs, re, time, os
 from datetime import datetime, timedelta
@@ -21,7 +22,7 @@ inputPath = '../pages/input/'
 inputBackupPath = '../pages/input-finished/'
 outputPath = '../pages/output/'
 personPagePath = '../pages/people/'
-logFile = codecs.open('log.txt', mode='w+')
+logFile = codecs.open('log.txt', mode='a')
 files = [f for f in listdir(inputPath) if isfile(join(inputPath, f))]
 
 def writeLog(message):
@@ -44,11 +45,18 @@ def getCoordinates(placeName):
 		location = storedLocation['coordinates'].split(',')
 	elif placeName.strip():
 		writeLog("Location (%s) not found, sleeping for 1 second." % placeName)
-		time.sleep(1)
-		geocodeLocation = geolocator.geocode(placeName)
+		try:
+			time.sleep(1)
+			geocodeLocation = geolocator.geocode(placeName)
+		except GeocoderTimedOut as e:
+			writeLog("Error thrown getting location: {}.\n\tTrying again.".format(e))
+			time.sleep(1)
+			geocodeLocation = geolocator.geocode(placeName)
+
 		if geocodeLocation:
 			location = [str(geocodeLocation.latitude), str(geocodeLocation.longitude)]
 		else:
+			writeLog("Unable to find coordinates for (%s)" % placeName)
 			return ''
 		newLocation = {
 			'name': placeName,
